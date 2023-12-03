@@ -19,7 +19,7 @@ import (
 )
 
 var RootCmd = &cobra.Command{
-	Use:   "gorelay [flags] pin=high pin=low",
+	Use:   "gorelay [flags] pin=high pin=low pin=h pin=l pin=0 pin=1",
 	Short: "GPIO controller via HTTP with golang and periph.io",
 	Args:  cobra.MinimumNArgs(0),
 	Run:   start,
