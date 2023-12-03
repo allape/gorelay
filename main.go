@@ -1,11 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"slices"
 	"syscall"
@@ -26,9 +24,7 @@ var OperatedPins = []string{}
 
 func CleanUpGPIO() {
 	for _, pin := range OperatedPins {
-		err := exec.Command(
-			fmt.Sprintf("echo %s > /sys/class/gpio/unexport", pin),
-		).Run()
+		err := os.WriteFile("/sys/class/gpio/unexport", []byte(pin+"\n"), 0o644)
 		if err != nil {
 			log.Println("Failed to clean up pin", pin, ", because (of)", err)
 		} else {
@@ -107,6 +103,7 @@ func SetupCtrlC() {
 	sig := <-sigChan
 	log.Println("\nReceived signal:", sig)
 	CleanUpGPIO()
+	log.Println("Goodbye~")
 	os.Exit(0)
 }
 
