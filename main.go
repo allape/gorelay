@@ -125,6 +125,7 @@ func SetupHTTPServer() {
 func SetupCtrlC() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGABRT)
 	sig := <-sigChan
 	log.Println("\nReceived signal:", sig)
 	CleanUpGPIO()
