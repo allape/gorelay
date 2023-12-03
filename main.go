@@ -1,11 +1,14 @@
 package main
 
 import (
+	"github.com/spf13/cobra"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"slices"
+	"strings"
 	"syscall"
 
 	"github.com/gin-contrib/cors"
@@ -15,12 +18,34 @@ import (
 	"periph.io/x/host/v3"
 )
 
+var RootCmd = &cobra.Command{
+	Use:   "gorelay [flags] pin=high pin=low",
+	Short: "GPIO controller via HTTP with golang and periph.io",
+	Args:  cobra.MinimumNArgs(0),
+	Run:   start,
+}
+
 var HostAddr = "0.0.0.0:8080"
 
 // var PowerPin = "78"
 // var LightPin = "76"
 
-var OperatedPins = []string{}
+var OperatedPins []string
+
+func SetPin(pinNumber string, state gpio.Level) (gpio.PinIO, error) {
+	pin := gpioreg.ByName(pinNumber)
+	if pin == nil {
+		return nil, nil
+	}
+	err := pin.Out(state)
+	if err != nil {
+		return pin, err
+	}
+	if !slices.Contains(OperatedPins, pinNumber) {
+		OperatedPins = append(OperatedPins, pinNumber)
+	}
+	return pin, nil
+}
 
 func CleanUpGPIO() {
 	for _, pin := range OperatedPins {
@@ -71,30 +96,30 @@ func SetupHTTPServer() {
 	router := gin.Default()
 	router.Use(cors.Default())
 
-	router.PUT("/pin/:pin/:status", func(ctx *gin.Context) {
+	router.Static("/app", "/app")
+	router.PUT("/pin/:pin/:state", func(ctx *gin.Context) {
 		pinNumber := ctx.Params.ByName("pin")
-		statusStr := ctx.Params.ByName("status")
-		status := gpio.Low
+		statusStr := ctx.Params.ByName("state")
+		state := gpio.Low
 		if statusStr == "1" {
-			status = gpio.High
+			state = gpio.High
 		}
-		pin := gpioreg.ByName(pinNumber)
+		pin, err := SetPin(pinNumber, state)
 		if pin == nil {
 			ctx.JSON(http.StatusNotFound, false)
 			return
 		}
-		err := pin.Out(status)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, err)
 			return
 		}
-		if !slices.Contains(OperatedPins, pinNumber) {
-			OperatedPins = append(OperatedPins, pinNumber)
-		}
 		ctx.JSON(http.StatusOK, true)
 	})
 
-	router.Run(HostAddr)
+	err := router.Run(HostAddr)
+	if err != nil {
+		log.Fatalln("Unable to start server because (of)", err)
+	}
 }
 
 func SetupCtrlC() {
@@ -107,8 +132,45 @@ func SetupCtrlC() {
 	os.Exit(0)
 }
 
-func main() {
+func SetupCommand() {
+	RootCmd.PersistentFlags().StringVarP(&HostAddr, "addr", "a", HostAddr, "Listening address for HTTP server")
+	err := RootCmd.Execute()
+	if err != nil {
+		log.Fatalln("Unable to parse arguments", err)
+	}
+}
+
+func start(_ *cobra.Command, args []string) {
 	SetupGPIO()
 	go SetupHTTPServer()
+
+	re, _ := regexp.Compile("^\\d+=(h(igh)?|l(ow)?)$")
+	for _, pinAndDefaultOut := range args {
+		pinAndDefaultOut = strings.ToLower(pinAndDefaultOut)
+		if !re.MatchString(pinAndDefaultOut) {
+			log.Println("Pattern", pinAndDefaultOut, "is not valid, skip...")
+			continue
+		}
+		splitValues := strings.Split(pinAndDefaultOut, "=")
+		pinNumber, stateString := splitValues[0], splitValues[1]
+		state := gpio.Low
+		if strings.HasPrefix(stateString, "h") {
+			state = gpio.High
+		}
+		pin, err := SetPin(pinNumber, state)
+		if pin == nil {
+			log.Println("No pin named", pinNumber, "found")
+			continue
+		}
+		if err != nil {
+			log.Println("Unable to set", pin, "to", state, ", because (of)", err)
+			continue
+		}
+		log.Println("Set", pin, "to", state)
+	}
+}
+
+func main() {
+	go SetupCommand()
 	SetupCtrlC()
 }
