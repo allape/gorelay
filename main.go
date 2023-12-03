@@ -144,7 +144,7 @@ func start(_ *cobra.Command, args []string) {
 	SetupGPIO()
 	go SetupHTTPServer()
 
-	re, _ := regexp.Compile("^\\d+=(h(igh)?|l(ow)?)$")
+	re, _ := regexp.Compile("^\\d+=(h(igh)?|l(ow)?|0|1)$")
 	for _, pinAndDefaultOut := range args {
 		pinAndDefaultOut = strings.ToLower(pinAndDefaultOut)
 		if !re.MatchString(pinAndDefaultOut) {
@@ -154,7 +154,7 @@ func start(_ *cobra.Command, args []string) {
 		splitValues := strings.Split(pinAndDefaultOut, "=")
 		pinNumber, stateString := splitValues[0], splitValues[1]
 		state := gpio.Low
-		if strings.HasPrefix(stateString, "h") {
+		if strings.HasPrefix(stateString, "h") || stateString[0] == '1' {
 			state = gpio.High
 		}
 		pin, err := SetPin(pinNumber, state)
