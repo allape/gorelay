@@ -1,11 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
+	"slices"
 	"syscall"
 
 	"github.com/gin-contrib/cors"
@@ -25,10 +27,7 @@ var OperatedPins = []string{}
 func CleanUpGPIO() {
 	for _, pin := range OperatedPins {
 		err := exec.Command(
-			"echo",
-			pin,
-			">",
-			"/sys/class/gpio/unexport",
+			fmt.Sprintf("echo %s > /sys/class/gpio/unexport", pin),
 		).Run()
 		if err != nil {
 			log.Println("Failed to clean up pin", pin, ", because (of)", err)
@@ -93,7 +92,9 @@ func SetupHTTPServer() {
 			ctx.JSON(http.StatusInternalServerError, err)
 			return
 		}
-		OperatedPins = append(OperatedPins, pinNumber)
+		if !slices.Contains(OperatedPins, pinNumber) {
+			OperatedPins = append(OperatedPins, pinNumber)
+		}
 		ctx.JSON(http.StatusOK, true)
 	})
 
